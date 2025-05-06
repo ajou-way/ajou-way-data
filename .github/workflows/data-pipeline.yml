@@ -1,0 +1,42 @@
+name: data-pipeline
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Upload .osm file via SSH
+      uses: appleboy/scp-action@v1
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        port: 22
+        source: "data/map.osm"
+        target: "/home/${{ secrets.USERNAME }}/workspace"
+
+    - name: Import .osm on EC2
+      uses: appleboy/ssh-action@v1
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        key: ${{ secrets.SSH_KEY }}
+        port: 22
+        script: |
+          echo "▶ Create required PostgreSQL extensions"
+          docker exec postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "CREATE EXTENSION IF NOT EXISTS postgis;"
+          docker exec postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "CREATE EXTENSION IF NOT EXISTS hstore;"
+          docker exec postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "CREATE EXTENSION IF NOT EXISTS pgrouting;"
+
+          echo "▶ Copy map.osm into container"
+          docker cp /home/${{ secrets.USERNAME }}/workspace/data/map.osm postgres_db:/map.osm
+
+          echo "▶ Run osm2pgsql import"
+          docker exec -i postgres_db bash -c \
+            "osm2pgsql -d ajou_way -U '${{ secrets.POSTGRESQL_USER }}' -H localhost -P 5432 -C 2000 --hstore --create /map.osm"
