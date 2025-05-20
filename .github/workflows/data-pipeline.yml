@@ -43,44 +43,52 @@ jobs:
           
           echo "▶ Drop and create edges table"
           docker exec -i postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "
-            DROP TABLE IF EXISTS edges CASCADE;
+          DROP TABLE IF EXISTS edges CASCADE;
           
-            CREATE TABLE edges AS
+          CREATE TABLE edges AS
+          SELECT
+            row_number() OVER () AS id,
+            ST_MakeLine(pt1.geom, pt2.geom)::geometry(LineString, 3857) AS geom
+          FROM (
             SELECT
-              row_number() OVER () AS id,
-              ST_MakeLine(pt1.geom, pt2.geom)::geometry(LineString, 3857) AS geom
-            FROM (
-              SELECT
-                osm_id,
-                (ST_DumpPoints(way)).path[1] AS pt_idx,
-                (ST_DumpPoints(way)).geom AS geom
-              FROM planet_osm_line
-              WHERE way IS NOT NULL
-            ) pt1
-            JOIN (
-              SELECT
-                osm_id,
-                (ST_DumpPoints(way)).path[1] AS pt_idx,
-                (ST_DumpPoints(way)).geom AS geom
-              FROM planet_osm_line
-              WHERE way IS NOT NULL
-            ) pt2
-            ON pt1.osm_id = pt2.osm_id
-            AND pt1.pt_idx = pt2.pt_idx - 1;
+              osm_id,
+              (ST_DumpPoints(way)).path[1] AS pt_idx,
+              (ST_DumpPoints(way)).geom AS geom
+            FROM planet_osm_line
+            WHERE way IS NOT NULL
+          ) pt1
+          JOIN (
+            SELECT
+              osm_id,
+              (ST_DumpPoints(way)).path[1] AS pt_idx,
+              (ST_DumpPoints(way)).geom AS geom
+            FROM planet_osm_line
+            WHERE way IS NOT NULL
+          ) pt2
+          ON pt1.osm_id = pt2.osm_id
+          AND pt1.pt_idx = pt2.pt_idx - 1;
+          "
           
-            \\echo '▶ Add source and target columns'
-            ALTER TABLE edges ADD COLUMN source BIGINT;
-            ALTER TABLE edges ADD COLUMN target BIGINT;
+          echo "▶ Add source and target columns"
+          docker exec -i postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "
+          ALTER TABLE edges ADD COLUMN source BIGINT;
+          ALTER TABLE edges ADD COLUMN target BIGINT;
+          "
           
-            \\echo '▶ Create topology using pgr_createTopology'
-            SELECT pgr_createTopology('edges', 0.00001, 'geom');
+          echo "▶ Create topology using pgr_createTopology"
+          docker exec -i postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "
+          SELECT pgr_createTopology('edges', 0.00001, 'geom');
+          "
           
-            \\echo '▶ Add cost columns'
-            ALTER TABLE edges ADD COLUMN cost DOUBLE PRECISION;
-            ALTER TABLE edges ADD COLUMN reverse_cost DOUBLE PRECISION;
+          echo "▶ Add cost columns"
+          docker exec -i postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "
+          ALTER TABLE edges ADD COLUMN cost DOUBLE PRECISION;
+          ALTER TABLE edges ADD COLUMN reverse_cost DOUBLE PRECISION;
+          "
           
-            \\echo '▶ Set cost and reverse_cost'
-            UPDATE edges
-            SET cost = ST_Length(geom),
-                reverse_cost = ST_Length(geom);
+          echo "▶ Set cost and reverse_cost"
+          docker exec -i postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "
+          UPDATE edges
+          SET cost = ST_Length(geom),
+              reverse_cost = ST_Length(geom);
           "
