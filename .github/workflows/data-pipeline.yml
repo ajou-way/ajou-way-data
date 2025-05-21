@@ -43,11 +43,11 @@ jobs:
         key: ${{ secrets.SSH_KEY }}
         port: 22
         script: |
-          docker exec postgres_db psql -h localhost -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "CREATE EXTENSION IF NOT EXISTS postgis;"
-          docker exec postgres_db psql -h localhost -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "CREATE EXTENSION IF NOT EXISTS hstore;"
-          docker exec postgres_db psql -h localhost -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "CREATE EXTENSION IF NOT EXISTS pgrouting;"
+          docker exec postgres_db bash -c "PGPASSWORD='${{ secrets.POSTGRESQL_PASSWORD }}' psql -h localhost -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c \"CREATE EXTENSION IF NOT EXISTS postgis;\""
+          docker exec postgres_db bash -c "PGPASSWORD='${{ secrets.POSTGRESQL_PASSWORD }}' psql -h localhost -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c \"CREATE EXTENSION IF NOT EXISTS hstore;\""
+          docker exec postgres_db bash -c "PGPASSWORD='${{ secrets.POSTGRESQL_PASSWORD }}' psql -h localhost -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c \"CREATE EXTENSION IF NOT EXISTS pgrouting;\""
 
-          docker exec -i postgres_db psql -h localhost -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "
+          docker exec postgres_db bash -c "PGPASSWORD='${{ secrets.POSTGRESQL_PASSWORD }}' psql -h localhost -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c \"
           DROP TABLE IF EXISTS ways CASCADE;
 
           CREATE TABLE ways AS
@@ -72,24 +72,26 @@ jobs:
           ) pt2
           ON pt1.osm_id = pt2.osm_id
           AND pt1.pt_idx = pt2.pt_idx - 1;
-          "
+          \""
 
-          docker exec -i postgres_db psql -h localhost -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "
+          docker exec postgres_db bash -c "PGPASSWORD='${{ secrets.POSTGRESQL_PASSWORD }}' psql -h localhost -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c \"
           ALTER TABLE ways ADD COLUMN source BIGINT;
           ALTER TABLE ways ADD COLUMN target BIGINT;
-          "
+          \""
 
-          docker exec -i postgres_db psql -h localhost -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "
+          docker exec postgres_db bash -c "PGPASSWORD='${{ secrets.POSTGRESQL_PASSWORD }}' psql -h localhost -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c \"
           SELECT pgr_createTopology('ways', 0.00001, 'geom');
-          "
+          \""
 
-          docker exec -i postgres_db psql -h localhost -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "
+          docker exec postgres_db bash -c "PGPASSWORD='${{ secrets.POSTGRESQL_PASSWORD }}' psql -h localhost -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c \"
           ALTER TABLE ways ADD COLUMN cost DOUBLE PRECISION;
           ALTER TABLE ways ADD COLUMN reverse_cost DOUBLE PRECISION;
 
           UPDATE ways
           SET cost = ST_Length(geom),
               reverse_cost = ST_Length(geom);
+          \""
+
           "
 
     - name: Restart all services after osm import (clean state)
