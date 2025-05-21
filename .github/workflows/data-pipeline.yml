@@ -11,17 +11,25 @@ jobs:
     - name: Checkout Repository
       uses: actions/checkout@v4
 
-    - name: Upload .osm file via SSH
-      uses: appleboy/scp-action@v1
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USERNAME }}
-        key: ${{ secrets.SSH_KEY }}
-        port: 22
-        source: "data/map.osm"
-        target: "/home/${{ secrets.USERNAME }}/workspace"
+    - name: Install osm2pgsql in GitHub Action runner
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y osm2pgsql postgresql-client
 
-    - name: Import .osm on EC2
+    - name: Import .osm to remote PostgreSQL
+      run: |
+        echo "▶ Import OSM data into PostgreSQL from GitHub Actions"
+        osm2pgsql \
+          -d ajou_way \
+          -U ${{ secrets.POSTGRESQL_USER }} \
+          -H ${{ secrets.HOST }} \
+          -P 5432 \
+          --hstore \
+          --create data/map.osm
+      env:
+        PGPASSWORD: ${{ secrets.POSTGRESQL_PASSWORD }}
+
+    - name: Configure ways table & pgrouting
       uses: appleboy/ssh-action@v1
       with:
         host: ${{ secrets.HOST }}
@@ -29,25 +37,15 @@ jobs:
         key: ${{ secrets.SSH_KEY }}
         port: 22
         script: |
-          echo "▶ Install pgRouting on EC2"
-          docker exec postgres_db bash -c "apt-get update && apt-get install -y postgresql-15-pgrouting"
-          
           echo "▶ Create required PostgreSQL extensions"
           docker exec postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "CREATE EXTENSION IF NOT EXISTS postgis;"
           docker exec postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "CREATE EXTENSION IF NOT EXISTS hstore;"
           docker exec postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "CREATE EXTENSION IF NOT EXISTS pgrouting;"
-          
-          echo "▶ Copy map.osm into container"
-          docker cp /home/${{ secrets.USERNAME }}/workspace/data/map.osm postgres_db:/map.osm
-          
-          echo "▶ Run osm2pgsql import"
-          docker exec -i postgres_db bash -c \
-            "osm2pgsql -d ajou_way -U '${{ secrets.POSTGRESQL_USER }}' -H localhost -P 5432 -C 2000 --hstore --create /map.osm"
-          
+
           echo "▶ Drop and create ways table"
           docker exec -i postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "
           DROP TABLE IF EXISTS ways CASCADE;
-          
+
           CREATE TABLE ways AS
           SELECT
             row_number() OVER () AS id,
@@ -71,24 +69,24 @@ jobs:
           ON pt1.osm_id = pt2.osm_id
           AND pt1.pt_idx = pt2.pt_idx - 1;
           "
-          
+
           echo "▶ Add source and target columns"
           docker exec -i postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "
           ALTER TABLE ways ADD COLUMN source BIGINT;
           ALTER TABLE ways ADD COLUMN target BIGINT;
           "
-          
+
           echo "▶ Create topology using pgr_createTopology"
           docker exec -i postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "
           SELECT pgr_createTopology('ways', 0.00001, 'geom');
           "
-          
+
           echo "▶ Add cost columns"
           docker exec -i postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "
           ALTER TABLE ways ADD COLUMN cost DOUBLE PRECISION;
           ALTER TABLE ways ADD COLUMN reverse_cost DOUBLE PRECISION;
           "
-          
+
           echo "▶ Set cost and reverse_cost"
           docker exec -i postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "
           UPDATE ways
