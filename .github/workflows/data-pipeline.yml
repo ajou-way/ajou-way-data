@@ -96,15 +96,15 @@ jobs:
           EOF"
 
 
-    - name: Restart all services after osm import (clean state)
-      uses: appleboy/ssh-action@v1
-      with:
-        host: ${{ secrets.HOST }}
-        username: ${{ secrets.USERNAME }}
-        key: ${{ secrets.SSH_KEY }}
-        port: 22
-        script: |
-          echo "▶ Restarting docker-compose stack"
-          cd /home/${{ secrets.USERNAME }}/workspace
-          docker-compose down
-          docker-compose up -d
+    # - name: Restart all services after osm import (clean state)
+    #   uses: appleboy/ssh-action@v1
+    #   with:
+    #     host: ${{ secrets.HOST }}
+    #     username: ${{ secrets.USERNAME }}
+    #     key: ${{ secrets.SSH_KEY }}
+    #     port: 22
+    #     script: |
+    #       echo "▶ Restarting docker-compose stack"
+    #       cd /home/${{ secrets.USERNAME }}/workspace
+    #       docker-compose down
+    #       docker-compose up -d
