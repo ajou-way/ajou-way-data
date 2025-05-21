@@ -29,6 +29,10 @@ jobs:
         key: ${{ secrets.SSH_KEY }}
         port: 22
         script: |
+          echo "▶ Install pgRouting on EC2"
+          sudo apt-get update
+          sudo apt-get install -y postgresql-15-pgrouting
+          
           echo "▶ Create required PostgreSQL extensions"
           docker exec postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "CREATE EXTENSION IF NOT EXISTS postgis;"
           docker exec postgres_db psql -U '${{ secrets.POSTGRESQL_USER }}' -d ajou_way -c "CREATE EXTENSION IF NOT EXISTS hstore;"
